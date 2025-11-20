@@ -1,0 +1,357 @@
+import pygame
+import sys
+import math
+import time
+from pygame import gfxdraw
+import threading
+import queue
+
+# Inisialisasi Pygame
+pygame.init()
+pygame.mixer.init()
+
+# Setup layar
+WIDTH, HEIGHT = 1000, 700
+screen = pygame.display.set_mode((WIDTH, HEIGHT))
+pygame.display.set_caption("Kasih Sayang Seorang Ayah - Cerita Animasi")
+
+# Warna
+SKY_BLUE = (135, 206, 235, 180)
+SUNSET_ORANGE = (255, 140, 0, 180)
+SUNSET_PINK = (255, 182, 193, 180)
+GRASS_GREEN = (126, 200, 80)
+TREE_BROWN = (101, 67, 33)
+CLOUD_WHITE = (255, 255, 255, 200)
+DARK_BLUE = (30, 60, 120)
+LIGHT_BROWN = (210, 180, 140)
+SKIN_TONE = (255, 213, 170)
+CHILD_PINK = (255, 200, 220)
+SWING_RED = (220, 60, 60)
+
+# Font
+try:
+    title_font = pygame.font.Font(None, 48)
+    story_font = pygame.font.Font(None, 32)
+    instruction_font = pygame.font.Font(None, 28)
+except:
+    title_font = pygame.font.SysFont('arial', 48)
+    story_font = pygame.font.SysFont('arial', 32)
+    instruction_font = pygame.font.SysFont('arial', 28)
+
+# Teks cerita dengan timing
+story_segments = [
+    (0, "Di sebuah senja yang hangat..."),
+    (5, "Seorang ayah membawa anaknya ke taman bermain"),
+    (10, "Mata anak kecil itu berbinar melihat ayunan"),
+    (15, "Dengan lembut, ayah mengangkat anaknya..."),
+    (20, "Dan menempatkannya di ayunan dengan penuh kasih"),
+    (25, "Setiap dorongan ayah penuh dengan cinta"),
+    (30, "Teriakan riang anaknya adalah musik bagi telinganya"),
+    (35, "Dalam momen sederhana ini..."),
+    (40, "Terkandung makna kasih sayang yang mendalam"),
+    (45, "Seorang ayah yang selalu ada..."),
+    (50, "Melindungi, membimbing, dan menyayangi"),
+    (55, "Inilah cinta tanpa syarat seorang ayah")
+]
+
+# Queue untuk text-to-speech
+tts_queue = queue.Queue()
+
+def text_to_speech(text):
+    """Fungsi untuk text-to-speech (akan menggunakan sistem TTS jika tersedia)"""
+    try:
+        # Coba gunakan pyttsx3 untuk text-to-speech
+        import pyttsx3
+        def speak():
+            engine = pyttsx3.init()
+            engine.setProperty('rate', 150)
+            engine.setProperty('volume', 0.8)
+            engine.say(text)
+            engine.runAndWait()
+        
+        thread = threading.Thread(target=speak)
+        thread.daemon = True
+        thread.start()
+    except ImportError:
+        # Fallback: print text ke console
+        print(f"Narasi: {text}")
+    except:
+        print(f"Narasi: {text}")
+
+# Fungsi menggambar dengan gradient dan transparansi
+def draw_gradient_rect(surface, rect, start_color, end_color, vertical=True):
+    """Menggambar rectangle dengan gradient"""
+    x, y, width, height = rect
+    if vertical:
+        for i in range(height):
+            ratio = i / height
+            r = int(start_color[0] + (end_color[0] - start_color[0]) * ratio)
+            g = int(start_color[1] + (end_color[1] - start_color[1]) * ratio)
+            b = int(start_color[2] + (end_color[2] - start_color[2]) * ratio)
+            pygame.draw.line(surface, (r, g, b), (x, y + i), (x + width, y + i))
+    else:
+        for i in range(width):
+            ratio = i / width
+            r = int(start_color[0] + (end_color[0] - start_color[0]) * ratio)
+            g = int(start_color[1] + (end_color[1] - start_color[1]) * ratio)
+            b = int(start_color[2] + (end_color[2] - start_color[2]) * ratio)
+            pygame.draw.line(surface, (r, g, b), (x + i, y), (x + i, y + height))
+
+def draw_cloud(surface, x, y, size):
+    """Menggambar awan yang halus"""
+    for dx, dy, scale in [(0, 0, 1), (20, -10, 0.8), (35, 5, 0.9), (15, 15, 0.7)]:
+        radius = int(size * scale)
+        gfxdraw.aacircle(surface, x + dx, y + dy, radius, CLOUD_WHITE)
+        gfxdraw.filled_circle(surface, x + dx, y + dy, radius, CLOUD_WHITE)
+
+def draw_tree(surface, x, y, trunk_height=120, crown_radius=80):
+    """Menggambar pohon dengan detail"""
+    # Batang pohon
+    trunk_rect = (x - 15, y, 30, trunk_height)
+    pygame.draw.rect(surface, TREE_BROWN, trunk_rect)
+    
+    # Daun pohon dengan gradient
+    for i in range(5):
+        radius = crown_radius - i * 8
+        color_factor = 1.0 - (i * 0.15)
+        leaf_color = (
+            int(GRASS_GREEN[0] * color_factor),
+            int(GRASS_GREEN[1] * color_factor),
+            int(GRASS_GREEN[2] * color_factor)
+        )
+        gfxdraw.aacircle(surface, x, y - 20 - i * 5, radius, leaf_color)
+        gfxdraw.filled_circle(surface, x, y - 20 - i * 5, radius, leaf_color)
+
+def draw_swing(surface, frame, x, y):
+    """Menggambar ayunan dengan animasi"""
+    # Tiang ayunan
+    pygame.draw.rect(surface, TREE_BROWN, (x - 150, y - 200, 20, 250))
+    pygame.draw.rect(surface, TREE_BROWN, (x + 130, y - 200, 20, 250))
+    pygame.draw.rect(surface, TREE_BROWN, (x - 150, y - 200, 300, 15))
+    
+    # Animasi ayunan
+    swing_offset = math.sin(frame * 0.1) * 30
+    
+    # Rantai ayunan
+    chain_length = 120
+    pygame.draw.line(surface, (100, 100, 100), (x - 100, y - 185), 
+                    (x - 100 + swing_offset, y - 185 + chain_length), 4)
+    pygame.draw.line(surface, (100, 100, 100), (x + 100, y - 185), 
+                    (x + 100 + swing_offset, y - 185 + chain_length), 4)
+    
+    # Tempat duduk ayunan
+    seat_rect = (x - 120 + swing_offset, y - 185 + chain_length, 40, 15)
+    pygame.draw.rect(surface, SWING_RED, seat_rect)
+    pygame.draw.rect(surface, (150, 40, 40), seat_rect, 2)
+    
+    return x - 100 + swing_offset, y - 185 + chain_length
+
+def draw_father(surface, x, y, frame, is_pushing=False):
+    """Menggambar karakter ayah"""
+    # Animasi gerakan
+    bounce = math.sin(frame * 0.15) * 3
+    
+    # Kepala
+    head_radius = 25
+    gfxdraw.aacircle(surface, x, y - 60 + bounce, head_radius, SKIN_TONE)
+    gfxdraw.filled_circle(surface, x, y - 60 + bounce, head_radius, SKIN_TONE)
+    
+    # Badan (baju)
+    body_rect = (x - 20, y - 35 + bounce, 40, 50)
+    pygame.draw.rect(surface, DARK_BLUE, body_rect)
+    pygame.draw.rect(surface, (20, 40, 80), body_rect, 2)
+    
+    # Celana
+    pygame.draw.rect(surface, (40, 40, 40), (x - 20, y + 15 + bounce, 40, 30))
+    
+    # Kaki
+    leg_offset = math.sin(frame * 0.2) * 5 if is_pushing else 0
+    pygame.draw.rect(surface, (30, 30, 30), (x - 15, y + 45 + bounce, 12, 40))
+    pygame.draw.rect(surface, (30, 30, 30), (x + 3, y + 45 + bounce + leg_offset, 12, 40))
+    
+    # Tangan (animasi mendorong)
+    if is_pushing:
+        push_offset = abs(math.sin(frame * 0.1)) * 20
+        # Tangan kiri mendorong
+        pygame.draw.line(surface, SKIN_TONE, (x - 20, y - 10 + bounce), 
+                        (x - 40 - push_offset, y + 10 + bounce), 6)
+        # Tangan kanan
+        pygame.draw.line(surface, SKIN_TONE, (x + 20, y - 10 + bounce), 
+                        (x + 35, y + 5 + bounce), 6)
+    else:
+        pygame.draw.line(surface, SKIN_TONE, (x - 20, y - 10 + bounce), 
+                        (x - 35, y + 5 + bounce), 6)
+        pygame.draw.line(surface, SKIN_TONE, (x + 20, y - 10 + bounce), 
+                        (x + 35, y + 5 + bounce), 6)
+
+def draw_child(surface, x, y, frame, on_swing=True):
+    """Menggambar karakter anak"""
+    # Animasi gerakan
+    bounce = math.sin(frame * 0.2) * 4 if on_swing else 0
+    
+    # Kepala
+    head_radius = 18
+    gfxdraw.aacircle(surface, x, y - 45 + bounce, head_radius, SKIN_TONE)
+    gfxdraw.filled_circle(surface, x, y - 45 + bounce, head_radius, SKIN_TONE)
+    
+    # Badan (baju)
+    body_rect = (x - 15, y - 27 + bounce, 30, 35)
+    pygame.draw.rect(surface, CHILD_PINK, body_rect)
+    pygame.draw.rect(surface, (220, 160, 180), body_rect, 2)
+    
+    # Celana
+    pygame.draw.rect(surface, (100, 80, 160), (x - 15, y + 8 + bounce, 30, 25))
+    
+    # Kaki
+    pygame.draw.rect(surface, (60, 40, 100), (x - 12, y + 33 + bounce, 10, 25))
+    pygame.draw.rect(surface, (60, 40, 100), (x + 2, y + 33 + bounce, 10, 25))
+    
+    # Tangan (memegang rantai ayunan)
+    if on_swing:
+        pygame.draw.line(surface, SKIN_TONE, (x - 15, y - 15 + bounce), 
+                        (x - 25, y - 35 + bounce), 4)
+        pygame.draw.line(surface, SKIN_TONE, (x + 15, y - 15 + bounce), 
+                        (x + 25, y - 35 + bounce), 4)
+
+def draw_heart(surface, x, y, size, pulse_factor):
+    """Menggambar hati dengan animasi berdenyut"""
+    heart_size = size * (1 + pulse_factor * 0.2)
+    points = []
+    for i in range(30):
+        angle = 2 * math.pi * i / 30
+        # Formula matematika untuk bentuk hati
+        px = x + heart_size * 16 * math.sin(angle) ** 3
+        py = y - heart_size * (13 * math.cos(angle) - 5 * math.cos(2 * angle) - 
+                             2 * math.cos(3 * angle) - math.cos(4 * angle))
+        points.append((px, py))
+    
+    if len(points) > 2:
+        gfxdraw.filled_polygon(surface, points, (255, 100, 100, 180))
+        gfxdraw.aapolygon(surface, points, (255, 50, 50, 200))
+
+def draw_sunset_background(surface, frame):
+    """Menggambar latar belakang sunset yang indah"""
+    # Gradient langit sunset
+    draw_gradient_rect(surface, (0, 0, WIDTH, HEIGHT), 
+                      SUNSET_ORANGE, SUNSET_PINK)
+    
+    # Matahari terbenam
+    sun_y = 150 + math.sin(frame * 0.02) * 10
+    gfxdraw.aacircle(surface, WIDTH - 150, sun_y, 60, (255, 215, 0))
+    gfxdraw.filled_circle(surface, WIDTH - 150, sun_y, 60, (255, 215, 0))
+    
+    # Awan-awan
+    cloud_time = frame * 0.01
+    for i in range(4):
+        cloud_x = (WIDTH // 4 * i + cloud_time * 50) % (WIDTH + 200) - 100
+        draw_cloud(surface, cloud_x, 100 + i * 40, 30 + i * 5)
+
+def main():
+    clock = pygame.time.Clock()
+    frame = 0
+    start_time = time.time()
+    current_story_index = 0
+    last_tts_time = 0
+    
+    # Surface untuk efek transparansi
+    overlay = pygame.Surface((WIDTH, HEIGHT), pygame.SRCALPHA)
+    
+    running = True
+    while running:
+        current_time = time.time() - start_time
+        
+        # Cek jika sudah 1 menit
+        if current_time >= 60:
+            running = False
+            
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                running = False
+            elif event.type == pygame.KEYDOWN:
+                if event.key == pygame.K_ESCAPE:
+                    running = False
+        
+        # Update cerita
+        for i, (segment_time, text) in enumerate(story_segments):
+            if current_time >= segment_time and i >= current_story_index:
+                current_story_index = i
+                if current_time - last_tts_time > 1:  # Prevent TTS spam
+                    text_to_speech(text)
+                    last_tts_time = current_time
+                break
+        
+        # Gambar background
+        draw_sunset_background(screen, frame)
+        
+        # Gambar tanah/rumput
+        pygame.draw.rect(screen, GRASS_GREEN, (0, HEIGHT - 150, WIDTH, 150))
+        
+        # Gambar pohon-pohon
+        draw_tree(screen, 150, HEIGHT - 150)
+        draw_tree(screen, WIDTH - 200, HEIGHT - 180, 140, 90)
+        draw_tree(screen, 800, HEIGHT - 160, 110, 70)
+        
+        # Gambar ayunan
+        swing_x, swing_y = draw_swing(screen, frame, WIDTH // 2, HEIGHT - 100)
+        
+        # Gambar karakter
+        draw_father(screen, WIDTH // 2 - 80, HEIGHT - 100, frame, is_pushing=True)
+        draw_child(screen, swing_x, swing_y + 10, frame, on_swing=True)
+        
+        # Gambar hati-hati (efek kasih sayang)
+        heart_pulse = abs(math.sin(frame * 0.1))
+        for i in range(3):
+            angle = frame * 0.05 + i * 2.1
+            heart_x = WIDTH // 2 - 50 + math.cos(angle) * 100
+            heart_y = 200 + math.sin(angle) * 30
+            draw_heart(overlay, heart_x, heart_y, 1.5 + i * 0.3, heart_pulse)
+        
+        # Gambar overlay transparan
+        screen.blit(overlay, (0, 0))
+        overlay.fill((0, 0, 0, 0))  # Clear overlay untuk frame berikutnya
+        
+        # Gambar teks cerita
+        if current_story_index < len(story_segments):
+            _, current_text = story_segments[current_story_index]
+            
+            # Background teks semi transparan
+            text_bg = pygame.Surface((WIDTH - 100, 80), pygame.SRCALPHA)
+            text_bg.fill((0, 0, 0, 150))
+            screen.blit(text_bg, (50, 50))
+            
+            # Teks cerita
+            text_surface = story_font.render(current_text, True, (255, 255, 255))
+            screen.blit(text_surface, (WIDTH // 2 - text_surface.get_width() // 2, 70))
+        
+        # Judul
+        title = title_font.render("Kasih Sayang Seorang Ayah", True, (255, 255, 255))
+        screen.blit(title, (WIDTH // 2 - title.get_width() // 2, 10))
+        
+        # Timer dan instruksi
+        time_left = 60 - current_time
+        timer_text = instruction_font.render(f"Waktu: {time_left:.1f} detik", True, (255, 255, 255))
+        screen.blit(timer_text, (WIDTH - 200, HEIGHT - 40))
+        
+        instruction = instruction_font.render("Tekan ESC untuk keluar", True, (255, 255, 255))
+        screen.blit(instruction, (20, HEIGHT - 40))
+        
+        pygame.display.flip()
+        frame += 1
+        clock.tick(60)
+    
+    # Screen akhir
+    screen.fill((0, 0, 0))
+    end_text = title_font.render("Terima Kasih Telah Menonton", True, (255, 255, 255))
+    sub_text = story_font.render("Kasih Sayang Ayah Tak Terhingga", True, (200, 200, 200))
+    
+    screen.blit(end_text, (WIDTH // 2 - end_text.get_width() // 2, HEIGHT // 2 - 50))
+    screen.blit(sub_text, (WIDTH // 2 - sub_text.get_width() // 2, HEIGHT // 2 + 20))
+    
+    pygame.display.flip()
+    pygame.time.wait(3000)
+    
+    pygame.quit()
+    sys.exit()
+
+if __name__ == "__main__":
+    main()
